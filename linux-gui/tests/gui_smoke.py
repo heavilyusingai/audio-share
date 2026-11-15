@@ -29,6 +29,7 @@ fi
     os.environ["AUDIO_SHARE_SERVER"] = str(binary)
     Window = runpy.run_path(str(root / "audio-share-gui"), run_name="gui_smoke")["Window"]
     window = Window()
+    window.host.set_text("192.168.1.2")  # fake server does not bind in CI container
     window.show_all()
     phase = [0]
     deadline = time.monotonic() + 6
