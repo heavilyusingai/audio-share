@@ -28,7 +28,15 @@ message(STATUS "PLATFORM_NAME ${PLATFORM_NAME}")
 
 find_package(Protobuf CONFIG REQUIRED)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
-protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../protos/client.proto)
+# Recent Protobuf config packages export protobuf_generate instead of the legacy
+# protobuf_generate_cpp macro. Keep both for older vcpkg releases.
+if(COMMAND protobuf_generate)
+    protobuf_generate(LANGUAGE cpp OUT_VAR PROTO_SRCS
+        IMPORT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/../protos
+        PROTOS ../protos/client.proto)
+else()
+    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../protos/client.proto)
+endif()
 
 include_directories("src")
 set(
