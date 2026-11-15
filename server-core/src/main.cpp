@@ -45,7 +45,7 @@ int main(int argc, char* argv[])
         }
 
         if (result.count("version")) {
-            fmt::println("{}\nversion: {}\nurl: {}\n", AUDIO_SHARE_BIN_NAME, AUDIO_SHARE_VERSION, AUDIO_SHARE_HOMEPAGE);
+            fmt::print("{}\nversion: {}\nurl: {}\n\n", AUDIO_SHARE_BIN_NAME, AUDIO_SHARE_VERSION, AUDIO_SHARE_HOMEPAGE);
             return EXIT_SUCCESS;
         }
 
@@ -75,9 +75,9 @@ int main(int argc, char* argv[])
                 { "s24", "24 bit integer PCM" },
                 { "s32", "32 bit integer PCM" },
             };
-            fmt::println("encoding list:");
+            fmt::print("encoding list:\n");
             for(auto&& e : array) {
-                fmt::println("\t{}\t\t{}", e.first, e.second);
+                fmt::print("\t{}\t\t{}\n", e.first, e.second);
             }
             return EXIT_SUCCESS;
         }

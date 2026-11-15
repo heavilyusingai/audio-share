@@ -36,9 +36,9 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 # Recent Protobuf config packages export protobuf_generate instead of the legacy
 # protobuf_generate_cpp macro. Keep both for older vcpkg releases.
 if(COMMAND protobuf_generate)
-    protobuf_generate(LANGUAGE cpp OUT_VAR PROTO_SRCS
+    protobuf_generate(LANGUAGE cpp APPEND_PATH OUT_VAR PROTO_SRCS
         IMPORT_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/../protos
-        PROTOS ../protos/client.proto)
+        PROTOS ${CMAKE_CURRENT_SOURCE_DIR}/../protos/client.proto)
 else()
     protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ../protos/client.proto)
 endif()
@@ -63,8 +63,23 @@ endif()
 
 find_package(asio CONFIG QUIET)
 if(NOT TARGET asio::asio)
-    # Arch's asio package installs the standalone headers without CMake config.
-    find_path(ASIO_INCLUDE_DIR asio.hpp REQUIRED)
+    # Debian 12 has standalone Asio 1.22, which lacks the coroutine adapters
+    # used here. Prefer a newer installed header tree; fetch a pinned upstream
+    # header-only release only when the system copy is too old.
+    find_path(ASIO_INCLUDE_DIR asio/version.hpp)
+    if(ASIO_INCLUDE_DIR)
+        file(STRINGS "${ASIO_INCLUDE_DIR}/asio/version.hpp" _asio_version_line REGEX "^#define ASIO_VERSION [0-9]+")
+        string(REGEX MATCH "[0-9]+$" _asio_version "${_asio_version_line}")
+    endif()
+    if(NOT ASIO_INCLUDE_DIR OR _asio_version LESS 102800)
+        message(STATUS "System Asio is too old or unavailable; fetching pinned Asio 1.30.2")
+        include(FetchContent)
+        FetchContent_Declare(audio_share_asio_headers
+            GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+            GIT_TAG 42a93679dc4c8c5caf3d3082542f1bfa2438271d)
+        FetchContent_MakeAvailable(audio_share_asio_headers)
+        set(ASIO_INCLUDE_DIR "${audio_share_asio_headers_SOURCE_DIR}/asio/include")
+    endif()
     add_library(audio_share_asio INTERFACE)
     add_library(asio::asio ALIAS audio_share_asio)
     target_include_directories(audio_share_asio INTERFACE ${ASIO_INCLUDE_DIR})
