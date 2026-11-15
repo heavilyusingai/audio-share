@@ -81,6 +81,7 @@ public:
 
     void start_loopback_recording(std::shared_ptr<network_manager> network_manager, const capture_config& config);
     void stop();
+    bool capture_failed() const;
     void do_loopback_recording(std::shared_ptr<network_manager> network_manager, const capture_config& config);
 
     std::string get_format_binary();
@@ -91,7 +92,8 @@ public:
     
 private:
     std::thread _record_thread;
-    std::atomic_bool _stopped;
+    std::atomic_bool _stopped { true };
+    std::atomic_bool _capture_failed { false };
     std::shared_ptr<AudioFormat> _format;
 };
 

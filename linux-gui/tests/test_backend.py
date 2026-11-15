@@ -7,11 +7,18 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from backend import (Server, find_server, list_endpoints, local_address,
+from backend import (Server, classify_server_line, find_server, list_endpoints, local_address,
                      parse_endpoints, server_args)
 
 
 class BackendTests(unittest.TestCase):
+    def test_capture_readiness_is_not_socket_readiness(self):
+        self.assertEqual(classify_server_line('[info] server started'), 'listening')
+        self.assertEqual(classify_server_line('[info] tcp listen success'), 'log')
+        self.assertEqual(classify_server_line('[info] audio capture ready'), 'ready')
+        self.assertEqual(classify_server_line('[error] PipeWire capture failed: device lost'), 'capture_error')
+        self.assertEqual(classify_server_line('No PipeWire audio sinks found'), 'error')
+
     def test_endpoints(self):
         output = ('[info] PipeWire\nendpoint list:\n'
                   '\t* id: 1234 name: Speakers (HDMI)\n'

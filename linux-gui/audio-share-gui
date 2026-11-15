@@ -10,7 +10,7 @@ try:
 except (ImportError, ValueError) as exc:
     sys.exit(f"GTK3/PyGObject is required (Arch: sudo pacman -S python-gobject gtk3): {exc}")
 
-from backend import (DEFAULT_PORT, Server, find_server, list_endpoints,
+from backend import (DEFAULT_PORT, Server, classify_server_line, find_server, list_endpoints,
                      local_address, server_args)
 
 
@@ -25,6 +25,10 @@ class Window(Gtk.Window):
         self.closing = False
         self.running = False
         self.binary = None
+        self.refresh_serial = 0
+        self.start_serial = 0
+        self.failure_reason = None
+        self.requested_stop = False
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.add(box)
@@ -81,20 +85,43 @@ class Window(Gtk.Window):
         self.log.scroll_to_iter(buffer.get_end_iter(), 0, False, 0, 0)
 
     def on_refresh(self, _button):
-        try:
-            selected = self.endpoints.get_active_id()
-            items = list_endpoints(self.binary)
-            self.endpoints.remove_all()
-            self.endpoints.append("default", "Default sink")
-            for identifier, name, default in items:
-                self.endpoints.append(identifier, f"{name} ({identifier})" +
-                                      (" — default" if default else ""))
-            self.endpoints.set_active_id(selected if selected in [i[0] for i in items]
-                                         else "default")
-            if not items:
-                self.status.set_text("No PipeWire sinks found. Check that PipeWire is running.")
-        except (OSError, RuntimeError) as exc:
-            self.status.set_text(f"Cannot list sinks: {exc}")
+        # PipeWire discovery can block for seconds. Never block the GTK thread.
+        import threading
+        self.refresh_serial += 1
+        serial = self.refresh_serial
+        self.refresh.set_sensitive(False)
+        self.button.set_sensitive(False)
+        self.status.set_text("Checking PipeWire sinks…")
+
+        def load():
+            try:
+                result = (list_endpoints(self.binary), None)
+            except (OSError, RuntimeError) as exc:
+                result = (None, str(exc))
+            GLib.idle_add(self.on_sinks_loaded, serial, *result)
+
+        threading.Thread(target=load, daemon=True).start()
+
+    def on_sinks_loaded(self, serial, items, error):
+        if self.closing or serial != self.refresh_serial:
+            return False
+        self.refresh.set_sensitive(True)
+        if error:
+            self.status.set_text(f"Cannot list sinks: {error}")
+            self.button.set_sensitive(False)
+            return False
+        selected = self.endpoints.get_active_id()
+        self.endpoints.remove_all()
+        self.endpoints.append("default", "Default sink")
+        for identifier, name, default in items:
+            self.endpoints.append(identifier, f"{name} ({identifier})" +
+                                  (" — default" if default else ""))
+        self.endpoints.set_active_id(selected if selected in [i[0] for i in items]
+                                     else "default")
+        self.button.set_sensitive(bool(items))
+        self.status.set_text("Ready to start" if items else
+                             "No PipeWire sinks found. Check that PipeWire is running.")
+        return False
 
     def set_running(self, running):
         self.running = running
@@ -104,6 +131,7 @@ class Window(Gtk.Window):
 
     def on_toggle(self, _button):
         if self.running:
+            self.requested_stop = True
             self.status.set_text("Stopping server…")
             self.button.set_sensitive(False)
             self.server.stop()
@@ -115,30 +143,59 @@ class Window(Gtk.Window):
         except (OSError, RuntimeError, ValueError) as exc:
             self.status.set_text(str(exc))
             return
+        self.failure_reason = None
+        self.requested_stop = False
         self.set_running(True)
-        self.status.set_text("Starting…")
+        self.start_serial += 1
+        GLib.timeout_add_seconds(12, self.on_start_timeout, self.start_serial)
+        self.status.set_text("Starting capture…")
         self.append_log("Starting on " + self.host.get_text() + ":" +
                         str(self.port.get_value_as_int()))
 
+    def on_start_timeout(self, serial):
+        if self.running and self.start_serial == serial and not self.requested_stop:
+            self.failure_reason = "Capture did not become ready within 12 seconds. Check PipeWire and the selected sink."
+            self.status.set_text(self.failure_reason)
+            self.button.set_sensitive(False)
+            self.server.stop()
+        return False
+
     def on_line(self, line):
+        if self.closing:
+            return False
         self.append_log(line)
-        if "server started" in line:
-            self.status.set_text("Running — connect your phone to " +
+        kind = classify_server_line(line)
+        if kind == "listening":
+            self.status.set_text("Server listening; waiting for audio capture…")
+        elif kind == "ready":
+            self.start_serial += 1  # cancel the pending startup timeout
+            self.status.set_text("Capture ready — connect your phone to " +
                                  self.host.get_text() + ":" + str(self.port.get_value_as_int()))
+        elif kind in ("capture_error", "error"):
+            self.failure_reason = line
+            self.status.set_text("Capture or server error — see output below")
+            if kind == "capture_error" and self.running:
+                self.button.set_sensitive(False)
+                self.server.stop()
         return False
 
     def on_exit(self, code):
+        self.start_serial += 1
         self.set_running(False)
         self.button.set_sensitive(True)
-        self.status.set_text(f"Server stopped (exit code {code}). Check output for errors."
-                             if code else "Server stopped")
+        if self.failure_reason:
+            self.status.set_text("Server stopped: " + self.failure_reason)
+        elif self.requested_stop:
+            self.status.set_text("Server stopped")
+        else:
+            self.status.set_text(f"Server stopped unexpectedly (exit code {code}). Check output below.")
         if self.closing:
             Gtk.main_quit()
         return False
 
     def on_close(self, *_args):
+        self.closing = True
         if self.running:
-            self.closing = True
             self.button.set_sensitive(False)
             self.status.set_text("Stopping server…")
             self.server.stop()

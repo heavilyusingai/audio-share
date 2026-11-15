@@ -3,6 +3,7 @@
 #include "network_manager.hpp"
 
 #include <cxxopts.hpp>
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 #include <spdlog/spdlog.h>
@@ -110,11 +111,30 @@ int main(int argc, char* argv[])
             capture_config.channels = result["channels"].as<int>();
             capture_config.sample_rate = result["sample-rate"].as<int>();
 
+#ifdef linux
+            // Validate the sink before advertising a listening server. The capture
+            // worker otherwise returns quietly while TCP/UDP remain open.
+            const auto sinks = audio_manager->get_endpoint_list();
+            if (sinks.empty()) {
+                throw std::runtime_error("No PipeWire audio sinks found");
+            }
+            const auto selected = capture_config.endpoint_id == "default" || capture_config.endpoint_id.empty()
+                ? audio_manager->get_default_endpoint() : capture_config.endpoint_id;
+            if (selected.empty() || std::none_of(sinks.begin(), sinks.end(), [&](const auto& sink) { return sink.first == selected; })) {
+                throw std::runtime_error("Selected PipeWire sink is unavailable; refresh the sink list");
+            }
+#endif
+
             auto network_manager = std::make_shared<class network_manager>(audio_manager);
 
             network_manager->start_server(host, port, capture_config);
             network_manager->wait_server();
-
+            const bool capture_failed = audio_manager->capture_failed();
+            audio_manager->stop();
+            if (capture_failed) {
+                std::cerr << "Audio capture stopped unexpectedly\n";
+                return EXIT_FAILURE;
+            }
             return EXIT_SUCCESS;
         }
 

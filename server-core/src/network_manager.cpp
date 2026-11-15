@@ -185,6 +185,13 @@ void network_manager::stop_server()
     spdlog::info("server stopped");
 }
 
+void network_manager::request_stop()
+{
+    if (_ioc) {
+        _ioc->stop();
+    }
+}
+
 void network_manager::wait_server()
 {
     _net_thread.join();

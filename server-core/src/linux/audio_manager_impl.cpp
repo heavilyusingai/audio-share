@@ -165,17 +165,34 @@ void audio_manager::do_loopback_recording(std::shared_ptr<network_manager> netwo
         std::shared_ptr<class network_manager> network_manager;
         std::shared_ptr<AudioFormat> format;
         int block_align;
+        bool streaming;
+        bool format_ready;
+        bool ready_announced;
     } user_data = {
         .loop = _loop,
         .stream = nullptr,
         .network_manager = network_manager,
         .format = _format,
         .block_align = 0,
+        .streaming = false,
+        .format_ready = false,
+        .ready_announced = false,
     };
 
     static const struct pw_stream_events stream_events = {
         .version = PW_VERSION_STREAM_EVENTS,
         .state_changed = [](void* data, enum pw_stream_state old, enum pw_stream_state state, const char* error) {
+            auto* user_data = (struct user_data_t*)data;
+            if (state == PW_STREAM_STATE_ERROR) {
+                spdlog::error("PipeWire capture failed: {}", error ? error : "unknown error");
+                pw_main_loop_quit(user_data->loop);
+                return;
+            }
+            user_data->streaming = (state == PW_STREAM_STATE_STREAMING);
+            if (user_data->streaming && user_data->format_ready && !user_data->ready_announced) {
+                user_data->ready_announced = true;
+                spdlog::info("audio capture ready");
+            }
             if (state == PW_STREAM_STATE_STREAMING) {
                 if (spdlog::get_level() == spdlog::level::trace) {
                     auto user_data = (struct user_data_t*)data;
@@ -295,6 +312,11 @@ void audio_manager::do_loopback_recording(std::shared_ptr<network_manager> netwo
                 user_data->block_align = bits_per_sample / 8 * user_data->format->channels();
                 spdlog::info("block_align: {}", user_data->block_align);
                 spdlog::info("AudioFormat:\n{}", user_data->format->DebugString());
+                user_data->format_ready = true;
+                if (user_data->streaming && !user_data->ready_announced) {
+                    user_data->ready_announced = true;
+                    spdlog::info("audio capture ready");
+                }
             }
         },
         .process = [](void* data) {
@@ -308,7 +330,8 @@ void audio_manager::do_loopback_recording(std::shared_ptr<network_manager> netwo
             }
     
             buf = b->buffer;
-            if (buf->datas[0].data == nullptr) {
+            if (buf->datas[0].data == nullptr || user_data->block_align <= 0) {
+                pw_stream_queue_buffer(user_data->stream, b);
                 return;
             }
 
@@ -331,6 +354,10 @@ void audio_manager::do_loopback_recording(std::shared_ptr<network_manager> netwo
         nullptr);
 
     user_data.stream = pw_stream_new_simple(pw_main_loop_get_loop(_loop), "audio-share-server", props, &stream_events, &user_data);
+    if (!user_data.stream) {
+        spdlog::error("PipeWire capture failed: cannot create stream");
+        return;
+    }
 
     // clang-format off
     uint8_t buffer[1024];
@@ -344,11 +371,15 @@ void audio_manager::do_loopback_recording(std::shared_ptr<network_manager> netwo
     params[0] = spa_format_audio_raw_build(&pod_builder, SPA_PARAM_EnumFormat, &info);
     // clang-format on
 
-    pw_stream_connect(user_data.stream, PW_DIRECTION_INPUT, PW_ID_ANY,
+    if (pw_stream_connect(user_data.stream, PW_DIRECTION_INPUT, PW_ID_ANY,
         pw_stream_flags(PW_STREAM_FLAG_AUTOCONNECT
             | PW_STREAM_FLAG_MAP_BUFFERS
             | PW_STREAM_FLAG_RT_PROCESS),
-        params, 1);
+        params, 1) < 0) {
+        spdlog::error("PipeWire capture failed: cannot connect stream");
+        pw_stream_destroy(user_data.stream);
+        return;
+    }
 
     pw_main_loop_run(_loop);
 

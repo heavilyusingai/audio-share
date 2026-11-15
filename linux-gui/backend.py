@@ -82,6 +82,19 @@ def server_args(binary, host, port, endpoint):
     return [binary, f"--bind={address}:{number}", f"--endpoint={endpoint or 'default'}"]
 
 
+def classify_server_line(line):
+    """Do not confuse a bound socket with an operational audio capture stream."""
+    if "audio capture ready" in line:
+        return "ready"
+    if "PipeWire capture failed" in line:
+        return "capture_error"
+    if "server started" in line:
+        return "listening"
+    if "[error]" in line or "No PipeWire audio sinks" in line or "Selected PipeWire sink is unavailable" in line:
+        return "error"
+    return "log"
+
+
 class Server:
     """Own one as-cmd process; callbacks are called from the reader thread."""
 
