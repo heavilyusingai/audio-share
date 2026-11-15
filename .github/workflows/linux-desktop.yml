@@ -60,13 +60,7 @@ jobs:
           DESTDIR="$RUNNER_TEMP/stage" sh linux-gui/install.sh
           test -x "$RUNNER_TEMP/stage/usr/local/bin/audio-share-gui"
           test -f "$RUNNER_TEMP/stage/usr/local/share/applications/io.github.mkckr0.AudioShare.desktop"
-          printf '#!/bin/sh\nif [ "$1" = "--list-endpoint" ]; then printf "endpoint list:\\n\\t* id: 1 name: Test sink\\ntotal: 1\\n"; fi\n' > "$RUNNER_TEMP/fake-as-cmd"
-          chmod +x "$RUNNER_TEMP/fake-as-cmd"
-          set +e
-          AUDIO_SHARE_SERVER="$RUNNER_TEMP/fake-as-cmd" timeout 5s xvfb-run -a python3 linux-gui/audio-share-gui
-          status=$?
-          set -e
-          test "$status" -eq 124  # GUI stayed open until timeout
+          xvfb-run -a python3 linux-gui/tests/gui_smoke.py
       - name: Build and verify Arch release archive
         run: |
           sh linux-gui/package.sh

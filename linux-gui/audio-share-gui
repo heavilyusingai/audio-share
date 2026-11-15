@@ -2,6 +2,7 @@
 """GTK3 frontend for Audio Share's PipeWire command-line server."""
 
 import sys
+import subprocess
 
 try:
     import gi
@@ -96,7 +97,7 @@ class Window(Gtk.Window):
         def load():
             try:
                 result = (list_endpoints(self.binary), None)
-            except (OSError, RuntimeError) as exc:
+            except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
                 result = (None, str(exc))
             GLib.idle_add(self.on_sinks_loaded, serial, *result)
 
@@ -164,6 +165,8 @@ class Window(Gtk.Window):
         if self.closing:
             return False
         self.append_log(line)
+        if self.requested_stop:
+            return False
         kind = classify_server_line(line)
         if kind == "listening":
             self.status.set_text("Server listening; waiting for audio capture…")
