@@ -64,6 +64,17 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "linux-system-Release",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_BUILD_TYPE": "Release",
+                "AUDIO_SHARE_STATIC_LIBCPP": "OFF",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": true
+            }
         }
     ],
     "buildPresets": [
@@ -85,6 +96,13 @@
         {
             "name": "linux-Release",
             "configurePreset": "linux-Release",
+            "targets": [
+                "install/strip"
+            ]
+        },
+        {
+            "name": "linux-system-Release",
+            "configurePreset": "linux-system-Release",
             "targets": [
                 "install/strip"
             ]

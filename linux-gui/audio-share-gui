@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""GTK3 frontend for Audio Share's PipeWire command-line server."""
+
+import sys
+
+try:
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import GLib, Gtk
+except (ImportError, ValueError) as exc:
+    sys.exit(f"GTK3/PyGObject is required (Arch: sudo pacman -S python-gobject gtk3): {exc}")
+
+from backend import (DEFAULT_PORT, Server, find_server, list_endpoints,
+                     local_address, server_args)
+
+
+class Window(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="Audio Share")
+        self.set_default_size(540, 410)
+        self.set_border_width(16)
+        self.connect("delete-event", self.on_close)
+        self.server = Server(lambda line: GLib.idle_add(self.on_line, line),
+                             lambda code: GLib.idle_add(self.on_exit, code))
+        self.closing = False
+        self.running = False
+        self.binary = None
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.add(box)
+        title = Gtk.Label(label="Share computer audio to your Android phone")
+        title.set_xalign(0)
+        box.pack_start(title, False, False, 0)
+
+        grid = Gtk.Grid(column_spacing=12, row_spacing=10)
+        box.pack_start(grid, False, False, 0)
+        self.host = Gtk.Entry(text=local_address())
+        self.host.set_placeholder_text("e.g. 192.168.1.10")
+        self.port = Gtk.SpinButton.new_with_range(1, 65535, 1)
+        self.port.set_value(DEFAULT_PORT)
+        self.endpoints = Gtk.ComboBoxText()
+        self.endpoints.append("default", "Default sink")
+        self.endpoints.set_active_id("default")
+        self.refresh = Gtk.Button(label="Refresh sinks")
+        self.refresh.connect("clicked", self.on_refresh)
+        for row, (label, widget) in enumerate((("Host (PC LAN IP)", self.host),
+                                               ("Port (TCP + UDP)", self.port),
+                                               ("PipeWire sink", self.endpoints))):
+            text = Gtk.Label(label=label)
+            text.set_xalign(0)
+            grid.attach(text, 0, row, 1, 1)
+            grid.attach(widget, 1, row, 1, 1)
+        grid.attach(self.refresh, 1, 3, 1, 1)
+        grid.set_column_homogeneous(True)
+
+        self.button = Gtk.Button(label="Start server")
+        self.button.connect("clicked", self.on_toggle)
+        box.pack_start(self.button, False, False, 0)
+        self.status = Gtk.Label(label="Not running")
+        self.status.set_xalign(0)
+        self.status.set_line_wrap(True)
+        box.pack_start(self.status, False, False, 0)
+        box.pack_start(Gtk.Label(label="Server output (errors and connections)"), False, False, 0)
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_vexpand(True)
+        self.log = Gtk.TextView(editable=False, cursor_visible=False, monospace=True)
+        scroller.add(self.log)
+        box.pack_start(scroller, True, True, 0)
+
+        try:
+            self.binary = find_server()
+            self.on_refresh(None)
+        except (OSError, RuntimeError) as exc:
+            self.status.set_text(str(exc))
+            self.button.set_sensitive(False)
+            self.refresh.set_sensitive(False)
+
+    def append_log(self, line):
+        buffer = self.log.get_buffer()
+        buffer.insert(buffer.get_end_iter(), line + "\n")
+        self.log.scroll_to_iter(buffer.get_end_iter(), 0, False, 0, 0)
+
+    def on_refresh(self, _button):
+        try:
+            selected = self.endpoints.get_active_id()
+            items = list_endpoints(self.binary)
+            self.endpoints.remove_all()
+            self.endpoints.append("default", "Default sink")
+            for identifier, name, default in items:
+                self.endpoints.append(identifier, f"{name} ({identifier})" +
+                                      (" — default" if default else ""))
+            self.endpoints.set_active_id(selected if selected in [i[0] for i in items]
+                                         else "default")
+            if not items:
+                self.status.set_text("No PipeWire sinks found. Check that PipeWire is running.")
+        except (OSError, RuntimeError) as exc:
+            self.status.set_text(f"Cannot list sinks: {exc}")
+
+    def set_running(self, running):
+        self.running = running
+        self.button.set_label("Stop server" if running else "Start server")
+        for widget in (self.host, self.port, self.endpoints, self.refresh):
+            widget.set_sensitive(not running)
+
+    def on_toggle(self, _button):
+        if self.running:
+            self.status.set_text("Stopping server…")
+            self.button.set_sensitive(False)
+            self.server.stop()
+            return
+        try:
+            args = server_args(self.binary, self.host.get_text(),
+                               self.port.get_value_as_int(), self.endpoints.get_active_id())
+            self.server.start(args)
+        except (OSError, RuntimeError, ValueError) as exc:
+            self.status.set_text(str(exc))
+            return
+        self.set_running(True)
+        self.status.set_text("Starting…")
+        self.append_log("Starting on " + self.host.get_text() + ":" +
+                        str(self.port.get_value_as_int()))
+
+    def on_line(self, line):
+        self.append_log(line)
+        if "server started" in line:
+            self.status.set_text("Running — connect your phone to " +
+                                 self.host.get_text() + ":" + str(self.port.get_value_as_int()))
+        return False
+
+    def on_exit(self, code):
+        self.set_running(False)
+        self.button.set_sensitive(True)
+        self.status.set_text(f"Server stopped (exit code {code}). Check output for errors."
+                             if code else "Server stopped")
+        if self.closing:
+            Gtk.main_quit()
+        return False
+
+    def on_close(self, *_args):
+        if self.running:
+            self.closing = True
+            self.button.set_sensitive(False)
+            self.status.set_text("Stopping server…")
+            self.server.stop()
+            return True
+        return False
+
+
+if __name__ == "__main__":
+    Window().show_all()
+    Gtk.main()

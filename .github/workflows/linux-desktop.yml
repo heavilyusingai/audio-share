@@ -1,0 +1,46 @@
+name: Linux desktop
+
+on:
+  push:
+    paths:
+      - 'linux-gui/**'
+      - 'server-core/**'
+      - 'protos/**'
+      - '.github/workflows/linux-desktop.yml'
+  pull_request:
+    paths:
+      - 'linux-gui/**'
+      - 'server-core/**'
+      - 'protos/**'
+      - '.github/workflows/linux-desktop.yml'
+  workflow_dispatch:
+
+jobs:
+  arch:
+    name: Arch Linux native build and GUI checks
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: pacman -Syu --noconfirm --needed git base-devel cmake pkgconf pipewire protobuf asio spdlog cxxopts python python-gobject gtk3 iproute2 xorg-server-xvfb xorg-xauth
+      - uses: actions/checkout@v4
+      - name: Build native server without vcpkg
+        working-directory: server-core
+        run: |
+          cmake --preset linux-system-Release
+          cmake --build --preset linux-system-Release --parallel 2
+          out/install/linux-system-Release/bin/as-cmd --version
+      - name: Python tests
+        run: python3 -m unittest discover -s linux-gui/tests -v
+      - name: Desktop launcher installation smoke test
+        run: |
+          DESTDIR="$RUNNER_TEMP/stage" sh linux-gui/install.sh
+          test -x "$RUNNER_TEMP/stage/usr/local/bin/audio-share-gui"
+          test -f "$RUNNER_TEMP/stage/usr/local/share/applications/io.github.mkckr0.AudioShare.desktop"
+          printf '#!/bin/sh\nif [ "$1" = "--list-endpoint" ]; then printf "endpoint list:\\n\\t* id: 1 name: Test sink\\ntotal: 1\\n"; fi\n' > "$RUNNER_TEMP/fake-as-cmd"
+          chmod +x "$RUNNER_TEMP/fake-as-cmd"
+          set +e
+          AUDIO_SHARE_SERVER="$RUNNER_TEMP/fake-as-cmd" timeout 5s xvfb-run -a python3 linux-gui/audio-share-gui
+          status=$?
+          set -e
+          test "$status" -eq 124  # GUI stayed open until timeout

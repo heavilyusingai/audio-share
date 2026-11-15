@@ -4,6 +4,7 @@
 
 #include <cxxopts.hpp>
 #include <iostream>
+#include <stdexcept>
 #include <spdlog/spdlog.h>
 
 using string = std::string;
@@ -85,10 +86,19 @@ int main(int argc, char* argv[])
             size_t pos = s.find(':');
             string host = s.substr(0, pos);
             uint16_t port;
+            if (host.empty()) {
+                throw std::invalid_argument("bind address is empty; specify a LAN IPv4 address");
+            }
             if (pos == string::npos) {
                 port = 65530;
             } else {
-                port = (uint16_t)std::stoi(s.substr(pos + 1));
+                const auto port_text = s.substr(pos + 1);
+                size_t consumed = 0;
+                const int parsed = std::stoi(port_text, &consumed);
+                if (consumed != port_text.size() || parsed < 1 || parsed > 65535) {
+                    throw std::invalid_argument("port must be between 1 and 65535");
+                }
+                port = static_cast<uint16_t>(parsed);
             }
 
             auto audio_manager = std::make_shared<class audio_manager>();

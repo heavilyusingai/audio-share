@@ -119,22 +119,14 @@ std::string network_manager::select_default_address(const std::vector<std::strin
     }
 
     auto is_private_address = [](const std::string& address) {
-        constexpr uint32_t private_addr_list[] = {
-            0x0a000000,
-            0xac100000,
-            0xc0a80000,
-        };
-
-        uint32_t addr;
-        inet_pton(AF_INET, address.c_str(), &addr);
-        addr = ntohl(addr);
-        for (auto&& private_addr : private_addr_list) {
-            if ((addr & private_addr) == private_addr) {
-                return true;
-            }
+        uint32_t addr = 0;
+        if (inet_pton(AF_INET, address.c_str(), &addr) != 1) {
+            return false;
         }
-
-        return false;
+        addr = ntohl(addr);
+        return (addr & 0xff000000) == 0x0a000000
+            || (addr & 0xfff00000) == 0xac100000
+            || (addr & 0xffff0000) == 0xc0a80000;
     };
 
     for (auto&& address : address_list) {

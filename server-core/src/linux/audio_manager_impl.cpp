@@ -23,6 +23,8 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
 #include <pipewire/pipewire.h>
@@ -77,8 +79,14 @@ audio_manager_impl::audio_manager_impl()
     spdlog::info("pipewire header_version: {}, library_version: {}", pw_get_headers_version(), pw_get_library_version());
 
     _loop = pw_main_loop_new(nullptr);
-    _context = pw_context_new(pw_main_loop_get_loop(_loop), nullptr, 0);
-    _core = pw_context_connect(_context, nullptr, 0);
+    _context = _loop ? pw_context_new(pw_main_loop_get_loop(_loop), nullptr, 0) : nullptr;
+    _core = _context ? pw_context_connect(_context, nullptr, 0) : nullptr;
+    if (!_core) {
+        if (_context) pw_context_destroy(_context);
+        if (_loop) pw_main_loop_destroy(_loop);
+        pw_deinit();
+        throw std::runtime_error("Cannot connect to PipeWire. Is the user PipeWire service running?");
+    }
     _roundtrip = new roundtrip {
         ._core = _core,
         ._sync = 0,
@@ -367,12 +375,13 @@ audio_manager::endpoint_list_t audio_manager::get_endpoint_list()
 
                 auto user_data = (user_data_t*)object;
                 const char* object_serial = spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL);
+                if (!object_serial) return;
                 const char* nick_name = spa_dict_lookup(props, PW_KEY_NODE_NICK);
                 const char* name = spa_dict_lookup(props, PW_KEY_NODE_NAME);
                 const char* description = spa_dict_lookup(props, PW_KEY_NODE_DESCRIPTION);
                 const char* priority_session = spa_dict_lookup(props, PW_KEY_PRIORITY_SESSION);
 
-                user_data->endpoint_list_ptr->emplace_back(object_serial, nick_name ? nick_name : (description ? description : name));
+                user_data->endpoint_list_ptr->emplace_back(object_serial, nick_name ? nick_name : (description ? description : (name ? name : object_serial)));
 
                 int priority = priority_session ? std::stoi(priority_session) : -1;
                 if (priority > user_data->default_priority) {
@@ -391,7 +400,7 @@ audio_manager::endpoint_list_t audio_manager::get_endpoint_list()
     struct user_data_t user_data = {
         .endpoint_list_ptr = &endpoint_list,
         .default_index = -1,
-        .default_priority = -1,
+        .default_priority = std::numeric_limits<int>::min(),
     };
     pw_registry_add_listener(registry, &registry_listener, &registry_events, &user_data);
     (*_roundtrip)();
@@ -420,6 +429,7 @@ std::string audio_manager::get_default_endpoint()
                 auto user_data = (user_data_t*)object;
                 const char* priority_session = spa_dict_lookup(props, PW_KEY_PRIORITY_SESSION);
                 const char* object_serial = spa_dict_lookup(props, PW_KEY_OBJECT_SERIAL);
+                if (!object_serial) return;
 
                 int priority = priority_session ? std::stoi(priority_session) : -1;
                 if (priority > user_data->default_priority) {
@@ -433,7 +443,7 @@ std::string audio_manager::get_default_endpoint()
     struct pw_registry* registry = pw_core_get_registry(_core, PW_VERSION_REGISTRY, 0);
     struct spa_hook registry_listener {};
     struct user_data_t user_data = {
-        .default_priority = -1,
+        .default_priority = std::numeric_limits<int>::min(),
     };
     pw_registry_add_listener(registry, &registry_listener, &registry_events, &user_data);
     (*_roundtrip)();
