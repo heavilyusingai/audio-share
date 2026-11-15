@@ -49,7 +49,7 @@ jobs:
               ;;
             zypper)
               zypper --non-interactive refresh
-              zypper --non-interactive install --no-recommends git gcc-c++ make cmake pkg-config pipewire-devel protobuf-devel protobuf-compiler asio-devel spdlog-devel cxxopts-devel python3 python3-gobject gtk3 iproute2 xorg-x11-server-Xvfb xauth > /tmp/zypper.log 2>&1 || {
+              zypper --non-interactive install --no-recommends git gcc-c++ make cmake pkg-config pipewire-devel protobuf-devel asio-devel spdlog-devel cxxopts-devel python3 python3-gobject-Gdk typelib-1_0-Gtk-3_0 iproute2 xorg-x11-server-Xvfb xauth > /tmp/zypper.log 2>&1 || {
                 cat /tmp/zypper.log
                 echo "::error::$(grep -Ei 'not found|nothing provides|no provider|error|failed' /tmp/zypper.log | tail -15 | tr '\n' '|')"
                 exit 1

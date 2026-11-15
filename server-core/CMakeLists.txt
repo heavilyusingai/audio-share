@@ -26,7 +26,12 @@ endif()
 
 message(STATUS "PLATFORM_NAME ${PLATFORM_NAME}")
 
-find_package(Protobuf CONFIG REQUIRED)
+# Arch/vcpkg ship a CMake config package; Debian/Ubuntu commonly ship only
+# CMake's FindProtobuf module. Both provide protobuf::libprotobuf.
+find_package(Protobuf CONFIG QUIET)
+if(NOT Protobuf_FOUND)
+    find_package(Protobuf MODULE REQUIRED)
+endif()
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 # Recent Protobuf config packages export protobuf_generate instead of the legacy
 # protobuf_generate_cpp macro. Keep both for older vcpkg releases.
