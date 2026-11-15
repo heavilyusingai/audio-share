@@ -36,6 +36,16 @@ jobs:
             exit 1
           }
           cat /tmp/build.log
+      - name: Handle unavailable PipeWire daemon cleanly
+        working-directory: server-core
+        run: |
+          set +e
+          timeout 8s out/install/linux-system-Release/bin/as-cmd --list-endpoint > /tmp/pipewire.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/pipewire.log
+          test "$status" -eq 1
+          grep -q 'Cannot connect to PipeWire' /tmp/pipewire.log
       - name: Python tests
         if: always()
         run: python3 -m unittest discover -s linux-gui/tests -v
