@@ -1,0 +1,77 @@
+name: Linux distributions
+
+on:
+  push:
+    paths:
+      - 'server-core/**'
+      - 'linux-gui/**'
+      - 'protos/**'
+      - '.github/workflows/linux-distributions.yml'
+  pull_request:
+    paths:
+      - 'server-core/**'
+      - 'linux-gui/**'
+      - 'protos/**'
+      - '.github/workflows/linux-distributions.yml'
+  workflow_dispatch:
+
+jobs:
+  native:
+    name: ${{ matrix.distro }} native build and GTK smoke
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: Debian 12
+            image: debian:bookworm
+            family: apt
+          - distro: Ubuntu 24.04
+            image: ubuntu:24.04
+            family: apt
+          - distro: Fedora
+            image: fedora:latest
+            family: dnf
+          - distro: openSUSE Tumbleweed
+            image: opensuse/tumbleweed:latest
+            family: zypper
+    container: ${{ matrix.image }}
+    steps:
+      - name: Install native build and GUI dependencies
+        run: |
+          case '${{ matrix.family }}' in
+            apt)
+              apt-get update
+              DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git build-essential cmake pkg-config libpipewire-0.3-dev libprotobuf-dev protobuf-compiler libasio-dev libspdlog-dev libcxxopts-dev python3 python3-gi gir1.2-gtk-3.0 iproute2 xvfb xauth
+              ;;
+            dnf)
+              dnf install -y git gcc-c++ make cmake pkgconf-pkg-config pipewire-devel protobuf-devel protobuf-compiler asio-devel spdlog-devel cxxopts-devel python3 python3-gobject gtk3 iproute xorg-x11-server-Xvfb xorg-x11-xauth
+              ;;
+            zypper)
+              zypper --non-interactive refresh
+              zypper --non-interactive install --no-recommends git gcc-c++ make cmake pkg-config pipewire-devel protobuf-devel protobuf-compiler asio-devel spdlog-devel cxxopts-devel python3 python3-gobject gtk3 iproute2 xorg-x11-server-Xvfb xauth
+              ;;
+          esac
+      - uses: actions/checkout@v4
+      - name: Build with system libraries
+        working-directory: server-core
+        run: |
+          (cmake --preset linux-system-Release && cmake --build --preset linux-system-Release --parallel 2 && out/install/linux-system-Release/bin/as-cmd --version) > /tmp/native-build.log 2>&1 || {
+            cat /tmp/native-build.log
+            echo "::error::$(grep -Ei -A 5 'error|not found|could not find|failed' /tmp/native-build.log | tail -35 | tr '\n' '|')"
+            exit 1
+          }
+          cat /tmp/native-build.log
+          ldd out/install/linux-system-Release/bin/as-cmd | tee /tmp/deps.log
+          ! grep -q 'not found' /tmp/deps.log
+      - name: Frontend tests and staged install
+        run: |
+          python3 -m unittest discover -s linux-gui/tests -v
+          DESTDIR="$RUNNER_TEMP/stage" sh linux-gui/install.sh
+          test -x "$RUNNER_TEMP/stage/usr/local/bin/audio-share-gui"
+          xvfb-run -a python3 linux-gui/tests/gui_smoke.py > /tmp/gui-smoke.log 2>&1 || {
+            cat /tmp/gui-smoke.log
+            echo "::error::$(tail -25 /tmp/gui-smoke.log | tr '\n' '|')"
+            exit 1
+          }
+          cat /tmp/gui-smoke.log
