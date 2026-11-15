@@ -5,10 +5,14 @@ from pathlib import Path
 import runpy
 import tempfile
 import time
+import sys
 
+import gi
+gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
 root = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(root))
 with tempfile.TemporaryDirectory() as directory:
     binary = Path(directory) / "as-cmd"
     binary.write_text("""#!/bin/sh
