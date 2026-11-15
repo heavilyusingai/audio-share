@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the frontend (not the as-cmd server). PREFIX defaults to /usr/local.
+# Install the frontend, plus the server if bundled. PREFIX defaults to /usr/local.
 set -eu
 prefix=${PREFIX:-/usr/local}
 destdir=${DESTDIR:-}
@@ -10,3 +10,8 @@ install -Dm644 "$source_dir/io.github.mkckr0.AudioShare.desktop" "$destdir$prefi
 mkdir -p "$destdir$prefix/bin"
 printf '#!/bin/sh\nexec python3 "%s/share/audio-share-gui/audio-share-gui" "$@"\n' "$prefix" > "$destdir$prefix/bin/audio-share-gui"
 chmod 755 "$destdir$prefix/bin/audio-share-gui"
+
+# The release archive has bin/as-cmd alongside gui/. Source checkouts do not.
+if [ -x "$source_dir/../bin/as-cmd" ]; then
+    install -Dm755 "$source_dir/../bin/as-cmd" "$destdir$prefix/bin/as-cmd"
+fi

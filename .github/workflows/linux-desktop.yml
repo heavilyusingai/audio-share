@@ -14,6 +14,11 @@ on:
       - 'protos/**'
       - '.github/workflows/linux-desktop.yml'
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish the tested Arch/CachyOS prerelease'
+        type: boolean
+        default: false
 
 jobs:
   arch:
@@ -62,3 +67,39 @@ jobs:
           status=$?
           set -e
           test "$status" -eq 124  # GUI stayed open until timeout
+      - name: Build and verify Arch release archive
+        run: |
+          sh linux-gui/package.sh
+          cd server-core/out/install/linux-system-Release
+          sha256sum -c audio-share-0.3.4-arch-linux-gui.tar.gz.sha256
+          tar -tzf audio-share-0.3.4-arch-linux-gui.tar.gz | grep -E '/(bin/as-cmd|gui/audio-share-gui|gui/install.sh)$'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-linux-gui
+          path: |
+            server-core/out/install/linux-system-Release/audio-share-0.3.4-arch-linux-gui.tar.gz
+            server-core/out/install/linux-system-Release/audio-share-0.3.4-arch-linux-gui.tar.gz.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish Arch/CachyOS prerelease
+    needs: arch
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && github.ref == 'refs/heads/arena/0b80ef30-audio-share'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: arch-linux-gui
+          path: release_bin
+      - name: Publish verified assets from this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test "$(cat VERSION)" = 0.3.4
+          cd release_bin
+          sha256sum -c audio-share-0.3.4-arch-linux-gui.tar.gz.sha256
+          cd ..
+          gh release create v0.3.4-arch.1 --target "$GITHUB_SHA" --title 'Audio Share 0.3.4 — Arch Linux/CachyOS GUI' --prerelease --notes-file linux-gui/RELEASE_NOTES.md release_bin/*
