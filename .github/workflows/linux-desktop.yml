@@ -27,12 +27,19 @@ jobs:
       - name: Build native server without vcpkg
         working-directory: server-core
         run: |
-          cmake --preset linux-system-Release
-          cmake --build --preset linux-system-Release --parallel 2
-          out/install/linux-system-Release/bin/as-cmd --version
+          (cmake --preset linux-system-Release && cmake --build --preset linux-system-Release --parallel 2 && out/install/linux-system-Release/bin/as-cmd --version) > /tmp/build.log 2>&1 || {
+            printf '### Native build failure\n```\n' >> "$GITHUB_STEP_SUMMARY"
+            tail -100 /tmp/build.log >> "$GITHUB_STEP_SUMMARY"
+            printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/build.log
+            exit 1
+          }
+          cat /tmp/build.log
       - name: Python tests
+        if: always()
         run: python3 -m unittest discover -s linux-gui/tests -v
       - name: Desktop launcher installation smoke test
+        if: always()
         run: |
           DESTDIR="$RUNNER_TEMP/stage" sh linux-gui/install.sh
           test -x "$RUNNER_TEMP/stage/usr/local/bin/audio-share-gui"
