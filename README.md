@@ -61,22 +61,9 @@ Audio Share can share Windows/Linux computer's audio to Android phone over netwo
 - Install APK to your phone and open it. Modify the "Host" part to make sure it's same as the value of previous step, such as `192.168.xxx.xxx`. Click "▶" button and enjoy the audio🎶.
 
 
-## Linux desktop GUI (Arch Linux / CachyOS)
+## Linux desktop GUI (Arch, Debian/Ubuntu, Fedora, openSUSE)
 
-The GTK3 frontend controls the existing `as-cmd` PipeWire server; it is not a replacement for the Android app. Install PipeWire (including a working sink), the server binary, and the GUI dependencies:
-
-```sh
-sudo pacman -S --needed pipewire wireplumber python python-gobject gtk3 iproute2
-# Unpack the Linux release containing as-cmd, or build from source below.
-# If you build from source on Arch/CachyOS, install the native build dependencies:
-sudo pacman -S --needed base-devel cmake pkgconf pipewire ninja protobuf asio spdlog cxxopts
-```
-
-For a source checkout, build the server without vcpkg via `cmake --preset linux-system-Release -S server-core` (from `server-core`, run `cmake --preset linux-system-Release` instead) and `cmake --build server-core/out/build/linux-system-Release --target install/strip`; then run `python3 linux-gui/audio-share-gui` from the repository root. Otherwise point the GUI at an installed or unpacked server binary with `AUDIO_SHARE_SERVER=/path/to/as-cmd python3 linux-gui/audio-share-gui`. To install a desktop launcher (and the Python frontend) system-wide, run `sudo sh linux-gui/install.sh`; then run `audio-share-gui` from a terminal or launch **Audio Share** from the desktop menu. The installer also installs `as-cmd` when run from the bundled Arch release archive. The server must be in `PATH`, or set `AUDIO_SHARE_SERVER` in the launch environment. No root privileges are needed to run the GUI or server.
-
-Select a PC LAN IPv4 address reachable from the phone (the detected address can be changed), a port, and a PipeWire sink; click **Start server**. Use the same host and port in the Android app. **Refresh sinks** after changing PipeWire devices. The GUI starts/stops `as-cmd` and displays its output, including errors. It distinguishes a listening server from a ready PipeWire capture stream; if capture cannot start, the server exits with an error rather than silently remaining online. If your firewall is enabled, allow **both TCP and UDP** on the chosen port (see below); on Arch/CachyOS, `firewall-cmd` requires `firewalld` to be installed and running. If no sinks appear, check `systemctl --user status pipewire wireplumber` and `as-cmd -l` first. The GUI requires a graphical desktop session; `as-cmd -b` remains available for headless use.
-
-Run frontend tests without a graphical session: `python3 -m unittest discover -s linux-gui/tests -v`.
+The GTK3 GUI controls the PipeWire `as-cmd` server and shows its capture/connection status; it is not a replacement for the Android app. See **[Linux setup](docs/linux.md)** for verified distro-specific dependencies, source builds, archive installation, firewall and troubleshooting instructions. A GUI requires a graphical session; `as-cmd -b` remains available headlessly. The current network protocol is not authenticated or encrypted—use a trusted LAN and do not expose the port to the Internet.
 
 ## Usage for Windows/Linux CMD
 - Download the `audio-share-server-cmd-windows.zip` for Windows, the `audio-share-server-cmd-linux.tar.gz` for Linux.

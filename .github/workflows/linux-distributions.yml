@@ -26,15 +26,19 @@ jobs:
           - distro: Debian 12
             image: debian:bookworm
             family: apt
+            slug: debian12-linux
           - distro: Ubuntu 24.04
             image: ubuntu:24.04
             family: apt
+            slug: ubuntu2404-linux
           - distro: Fedora
             image: fedora:latest
             family: dnf
+            slug: fedora-linux
           - distro: openSUSE Tumbleweed
             image: opensuse/tumbleweed:latest
             family: zypper
+            slug: opensuse-tumbleweed-linux
     container: ${{ matrix.image }}
     steps:
       - name: Install native build and GUI dependencies
@@ -89,3 +93,20 @@ jobs:
             exit 1
           }
           cat /tmp/gui-smoke.log
+      - name: Package distro-specific binary and installer
+        run: |
+          sh linux-gui/package.sh server-core/out/install/linux-system-Release/bin/as-cmd server-core/out/install/linux-system-Release '${{ matrix.slug }}'
+          cd server-core/out/install/linux-system-Release
+          sha256sum -c 'audio-share-0.3.4-${{ matrix.slug }}-gui.tar.gz.sha256'
+          mkdir extracted
+          tar -xzf 'audio-share-0.3.4-${{ matrix.slug }}-gui.tar.gz' -C extracted
+          test -x 'extracted/audio-share-0.3.4-${{ matrix.slug }}-gui/bin/as-cmd'
+          DESTDIR="$RUNNER_TEMP/bundle-stage" sh 'extracted/audio-share-0.3.4-${{ matrix.slug }}-gui/gui/install.sh'
+          test -x "$RUNNER_TEMP/bundle-stage/usr/local/bin/as-cmd"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.slug }}-gui
+          path: |
+            server-core/out/install/linux-system-Release/audio-share-0.3.4-${{ matrix.slug }}-gui.tar.gz
+            server-core/out/install/linux-system-Release/audio-share-0.3.4-${{ matrix.slug }}-gui.tar.gz.sha256
+          if-no-files-found: error
