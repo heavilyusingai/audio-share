@@ -407,7 +407,7 @@ void network_manager::broadcast_audio_data(const char* data, size_t count, int b
         begin_pos += real_seg_size;
     }
 
-    _ioc->post([seg_list = std::move(seg_list), self = shared_from_this()] {
+    asio::post(*_ioc,[seg_list = std::move(seg_list), self = shared_from_this()] {
         for (const auto& seg : seg_list) {
             for (auto& [peer, info] : self->_playing_peer_list) {
                 self->_udp_server->async_send_to(asio::buffer(*seg), info->udp_peer, [seg](const asio::error_code& ec, std::size_t bytes_transferred) { });
