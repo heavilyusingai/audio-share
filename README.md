@@ -65,6 +65,10 @@ Audio Share can share Windows/Linux computer's audio to Android phone over netwo
 
 The GTK3 GUI controls the PipeWire `as-cmd` server and shows its capture/connection status; it is not a replacement for the Android app. See **[Linux setup](docs/linux.md)** for verified distro-specific dependencies, source builds, archive installation, firewall and troubleshooting instructions. A GUI requires a graphical session; `as-cmd -b` remains available headlessly. The current network protocol is not authenticated or encrypted—use a trusted LAN and do not expose the port to the Internet.
 
+## Product research and contributing ideas
+
+The [250-item opportunity audit](docs/product-opportunity-audit.md) and [1,024-item UX/comfort atlas](docs/ux-comfort-atlas-1024.md) are research and design hypotheses, not an implementation roadmap or verified user-request count. See the [research contribution guide](docs/research-contribution-guide.md) to validate an idea, check existing issues, and write a small, testable contribution.
+
 ## Usage for Windows/Linux CMD
 - Download the `audio-share-server-cmd-windows.zip` for Windows, the `audio-share-server-cmd-linux.tar.gz` for Linux.
 - Uncompress the archive file.

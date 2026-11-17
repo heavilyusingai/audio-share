@@ -2,6 +2,8 @@
 
 **Date:** 2026-11-15 · **Scope:** this repository's v0.3.4-era server/Android code and the Linux GTK frontend present in this workspace. **Status:** research/backlog only; none of these 250 proposals is claimed as implemented. The Arch GUI prerelease is a starting point, not evidence that hardware streaming or all upstream issues are fixed. “Premium” means a polished, reliable outcome—not a proposed paywall.
 
+For a small, evidence-qualified contribution based on this audit or the [1,024-item UX atlas](ux-comfort-atlas-1024.md), start with the [research contribution guide](research-contribution-guide.md). These lists are not automatically filed issues.
+
 ## Method and evidence
 
 I reviewed `server-core/src/{network_manager.cpp,main.cpp,linux/audio_manager_impl.cpp}`, `docs/protocol.md`, `protos/client.proto`, `android-app/.../{service,ui/screen}`, `linux-gui/{backend.py,audio-share-gui}`, the project's README, public upstream issues, and external platform/UX guidance. I sampled issue bodies, not just titles. **Open upstream issues are signals, not verified regressions in this checkout; closed reports are historical signals.** External community threads are directional, not measured demand. Pinterest is visual mood-board material only; do not copy its layouts/assets. No user interviews, security penetration test, or real phone audio benchmark was conducted.
